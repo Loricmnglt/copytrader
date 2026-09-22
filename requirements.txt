@@ -1,0 +1,6 @@
+# The core (doctor / analyze / paper / report) needs NOTHING beyond the
+# Python 3.11+ standard library.
+#
+# Only LIVE on-chain execution needs these, and they are imported lazily:
+web3>=6.15
+eth-account>=0.11

@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+*.sqlite
+*.sqlite-*
+*.out.log
+hl_state_*.json
+hl_ws_state_*.json
+reports/
+hl_reports/
+hl_ws_reports/
+hl_ws_live_reports/
+chart_*.html
+config.local.toml

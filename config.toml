@@ -1,0 +1,146 @@
+# ---------------------------------------------------------------------------
+# copytrader configuration.  Copy this file to  config.toml  and edit.
+# All money-relevant knobs live here; nothing needs a code change to tune.
+# ---------------------------------------------------------------------------
+
+# Chains to MONITOR + paper-trade. Live execution uses only [live].chain.
+chains = ["arbitrum", "base", "ethereum"]
+
+poll_interval_s = 3.0          # how often to poll RPCs for new wallet activity
+db_path = "copytrader.sqlite"  # ledger location (weights.json sits next to it)
+csv_dir = "reports"            # CSV exports go here
+
+# Optional: a single free Etherscan V2 key unlocks full wallet-history
+# analysis on every chain. Put the KEY in this env var, never in this file.
+etherscan_api_key_env = "ETHERSCAN_API_KEY"
+
+# Optional private RPCs (STRONGLY recommended: faster + fewer rate limits =
+# lower copy latency). Public ones are used if omitted. Put API keys in env
+# vars and reference them as ${VAR} — they are expanded at load time, so no
+# secret ever lives in this file. Example:
+# [rpc_overrides]
+# arbitrum = ["https://arb-mainnet.g.alchemy.com/v2/${ALCHEMY_KEY}"]
+# base     = ["https://base-mainnet.g.alchemy.com/v2/${ALCHEMY_KEY}"]
+
+# ---- wallets to follow ----------------------------------------------------
+[[wallets]]
+address = "0xf97ad6704baec104d00b88e0c157e2b7b3a1ddd1"
+label   = "wallet-1"
+weight  = 1.0          # manual weight; `analyze` overwrites via weights.json
+enabled = true
+
+[[wallets]]
+address = "0xac142fee46f8dacbfef23e1e41d79f1f7233487e"
+label   = "wallet-2"
+weight  = 1.0
+enabled = true
+
+[[wallets]]
+address = "0xd13552538def5cecc78a20aa2236573f0bee6443"
+label   = "wallet-3"
+weight  = 1.0
+enabled = true
+
+[[wallets]]
+address = "0x95da8596c44dd09f4b8becce87ad3b7894fb2328"
+label   = "wallet-4"
+weight  = 1.0
+enabled = true
+
+# ---- risk / capital -------------------------------------------------------
+[risk]
+budget            = 100.0      # total budget in the quote currency
+quote_currency    = "CHF"
+quote_to_usd      = 1.12       # 1 CHF -> USD (adjust to spot)
+reserve_pct       = 0.10       # keep 10% as dry powder, never deployed
+base_alloc_pct    = 0.10       # ~10% of budget per new position (x conviction)
+max_position_pct  = 0.20       # never put >20% of budget in one position
+max_per_token_pct = 0.20       # never hold >20% of budget in one token
+max_concurrent    = 6          # at most 6 open positions at once
+take_profit_pct   = 0.60       # +60% -> take profit
+stop_loss_pct     = 0.35       # -35% -> stop loss
+trailing_stop_pct = 0.25       # give back 25% from the peak -> exit
+max_hold_minutes  = 240.0      # hard time-based exit
+cooldown_minutes  = 30.0       # per token, after closing, before re-entry
+daily_loss_halt_pct = 0.25     # stop opening new trades if day is -25%
+
+# ---- signal / filtering ---------------------------------------------------
+[signal]
+min_liquidity_usd     = 20000.0  # skip thin tokens (rug/slippage risk)
+min_volume_h24_usd    = 10000.0
+min_pair_age_minutes  = 15.0     # avoid unverifiable brand-new snipes
+max_pair_age_hours    = 720.0
+max_price_drift_pct   = 0.12     # skip if price already +12% past wallet entry
+confluence_window_s   = 900.0    # 2+ wallets within 15 min -> higher conviction
+min_conviction        = 0.35     # ignore signals below this composite score
+min_wallet_base_usd   = 50.0     # ignore a wallet's dust-sized trades
+honeypot_check        = true
+max_token_tax_pct     = 0.10     # skip tokens with >10% buy/sell tax
+mirror_wallet_sells   = true     # when a followed wallet sells, we exit too
+
+# ---- execution model (paper) ---------------------------------------------
+[execution]
+latency_ms          = 4000.0   # modeled detect->fill delay (added to real lag)
+dex_fee_pct         = 0.003    # pool fee assumption
+extra_slippage_pct  = 0.0      # operator fudge factor on top of impact model
+price_impact_factor = 1.0      # scale the slippage impact model (calibrate)
+
+# Gas in REAL conditions: when true, gas per swap = live eth_gasPrice *
+# swap_gas_units * native price (refreshed continuously, tracks congestion).
+# The gas_usd_* values are the fallback if the RPC gas price is unavailable.
+use_live_gas       = true
+gas_usd_arbitrum   = 0.05
+gas_usd_base       = 0.03
+gas_usd_ethereum   = 8.0
+gas_usd_bsc        = 0.15
+swap_gas_units_arbitrum = 500000
+swap_gas_units_base     = 250000
+swap_gas_units_ethereum = 220000
+swap_gas_units_bsc      = 300000
+
+# ===========================================================================
+# HYPERLIQUID perp copy-trader (these 4 wallets are HL perp traders).
+# Commands:  hl-doctor | hl-analyze | hl-paper | hl-report | hl-live
+# ===========================================================================
+[hyperliquid]
+budget            = 20.0      # TEST REEL : 20 CHF (passera a 200 apres validation)
+quote_currency    = "CHF"
+quote_to_usd      = 1.12
+# --- TEST AGRESSIF x10 (paper) : levier eleve + garde-fous obligatoires ---
+exposure_scale    = 8.0       # pousse l'exposition vers le plafond
+max_gross_leverage = 10.0     # exposition totale <= 10x la base
+size_on_equity    = true      # LEVIER CONSTANT : size sur l'equite (compounding)
+max_per_coin_pct  = 1.5       # un coin peut porter jusqu'a 1.5x la base de notionnel
+per_wallet_exposure_clamp = 3.0   # clamp each wallet's frac-of-book exposure
+rebalance_band_pct = 0.25     # ANTI-CHURN : n'ajuste que si l'ecart > 25% du budget
+min_order_usd     = 12.0      # TEST 20 CHF : baisse a $12 pour que des ordres passent (mini HL $10). Remettre a 20 pour le run a 200.
+daily_loss_halt_pct = 0.25    # stop increasing exposure if day is -25%
+# --- PROTECTIONS (bornent la perte par trade et par compte a x10) ---
+stop_loss_pct     = 0.10      # ferme toute position a -10% de son entree
+account_kill_pct  = 0.45      # liquide TOUT + stop du jour si equite -45%
+stop_cooldown_min = 90.0      # apres un stop, pas de re-entree sur ce coin (90 min)
+taker_fee_pct     = 0.00045   # HL taker fee ~0.045%
+slippage_pct      = 0.0005    # modeled slippage on liquid perps
+funding_enabled   = true      # accrue funding on open positions
+poll_interval_s   = 30.0      # ANTI-CHURN : reequilibre toutes les 30s (au lieu de 5s)
+coins_whitelist   = []        # e.g. ["BTC","ETH","SOL"]; empty = all
+coins_blacklist   = []
+db_path           = "hl_copytrader.sqlite"
+csv_dir           = "hl_reports"
+
+# Hyperliquid LIVE (REAL money — off by default; same gates as spot)
+[hl_live]
+enabled          = true
+private_key_env  = "COPYTRADER_PK"
+dry_run_first    = false
+max_slippage_pct = 0.01
+account_address  = ""   # VPS: mettre l'adresse du compte principal quand COPYTRADER_PK = cle API (trade-only)
+
+# ---- live execution SPOT (REAL MONEY — off by default) --------------------
+[live]
+enabled          = false        # master switch
+chain            = "arbitrum"   # single chain for live trading
+aggregator       = "odos"
+private_key_env  = "COPYTRADER_PK"  # env var NAME holding the key (not the key)
+max_gas_price_gwei = 2.0
+dry_run_first    = true         # keep true until you've watched it dry-run
